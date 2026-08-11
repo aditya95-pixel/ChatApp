@@ -1,3 +1,4 @@
+import PersonaModal from "./components/PersonaModal";
 import Navbar from "./components/Navbar";
 
 import HomePage from "./pages/HomePage";
@@ -37,7 +38,7 @@ const App = () => {
   return (
     <div data-theme={theme}>
       <Navbar />
-
+      <PersonaModal />
       <Routes>
         <Route path="/" element={authUser ? <HomePage /> : <Navigate to="/login" />} />
         <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to="/" />} />

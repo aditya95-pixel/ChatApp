@@ -68,15 +68,23 @@ const Sidebar = () => {
             </div>
 
             {/* User info - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0">
-              <div className="font-medium truncate">{user.fullName}</div>
-              <div className="text-sm text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+            <div className="hidden lg:flex flex-1 items-center justify-between min-w-0">
+              <div className="text-left truncate">
+                <div className="font-medium truncate">{user.fullName}</div>
+                <div className="text-sm text-zinc-400">
+                  {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+                </div>
               </div>
+
+              {/* UNREAD MESSAGES BADGE */}
+              {user.unreadCount > 0 && selectedUser?._id !== user._id && (
+                <span className="bg-primary text-primary-content text-xs font-bold px-2 py-0.5 rounded-full">
+                  {user.unreadCount > 99 ? "99+" : user.unreadCount}
+                </span>
+              )}
             </div>
           </button>
         ))}
-
         {filteredUsers.length === 0 && (
           <div className="text-center text-zinc-500 py-4">No online users</div>
         )}

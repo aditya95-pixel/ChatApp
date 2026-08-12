@@ -50,7 +50,9 @@ export const useChatStore = create((set, get) => ({
 
     // Prevent attaching duplicate event listeners
     socket.off("newMessage");
+    socket.off("messagesRead");
 
+    // 1. Listen for incoming messages
     socket.on("newMessage", (newMessage) => {
       const { selectedUser } = get();
       const isMessageSentFromSelectedUser = selectedUser && newMessage.senderId === selectedUser._id;
@@ -58,9 +60,13 @@ export const useChatStore = create((set, get) => ({
       if (isMessageSentFromSelectedUser) {
         // Appends to chat view and marks read immediately in DB
         set({
-          messages: [...get().messages, newMessage],
+          messages: [...get().messages, { ...newMessage, isRead: true }],
         });
-        axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`).catch((err) => {
+
+        axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`).then(() => {
+          // Notify the sender over socket that we read their message
+          socket.emit("messagesRead", { senderId: selectedUser._id });
+        }).catch((err) => {
           console.error("Failed to mark message as read:", err);
         });
       } else {
@@ -75,11 +81,28 @@ export const useChatStore = create((set, get) => ({
         });
       }
     });
+
+    // 2. Listen for read receipts (when the selected user reads YOUR messages)
+    socket.on("messagesRead", ({ readerId }) => {
+      const { selectedUser } = get();
+      
+      // If the person who read the message is currently selected, update double checkmarks to blue
+      if (selectedUser && selectedUser._id === readerId) {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            !msg.isRead ? { ...msg, isRead: true } : msg
+          ),
+        }));
+      }
+    });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    if (socket) socket.off("newMessage");
+    if (socket) {
+      socket.off("newMessage");
+      socket.off("messagesRead");
+    }
   },
 
   setSelectedUser: async (selectedUser) => {
@@ -94,9 +117,14 @@ export const useChatStore = create((set, get) => ({
       ),
     });
 
-    // 2. Sync unread state in backend database
+    // 2. Sync unread state in backend database and notify socket
     try {
       await axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`);
+      
+      const socket = useAuthStore.getState().socket;
+      if (socket) {
+        socket.emit("messagesRead", { senderId: selectedUser._id });
+      }
     } catch (error) {
       console.error("Failed to mark messages as read:", error);
     }

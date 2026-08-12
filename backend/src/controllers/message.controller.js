@@ -86,13 +86,20 @@ export const sendMessage = async (req, res) => {
 
 export const markMessagesAsRead = async (req, res) => {
   try {
-    const { id: userToChatId } = req.params;
-    const myId = req.user._id;
+    const { id: userToChatId } = req.params; // The sender of the messages
+    const myId = req.user._id;               // The reader (current user)
 
+    // 1. Update database status
     await Message.updateMany(
       { senderId: userToChatId, receiverId: myId, isRead: false },
       { $set: { isRead: true } }
     );
+
+    // 2. Emit real-time read receipt to the original message sender
+    const senderSocketId = getReceiverSocketId(userToChatId);
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messagesRead", { readerId: myId });
+    }
 
     res.status(200).json({ message: "Messages marked as read" });
   } catch (error) {

@@ -44,13 +44,38 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  deleteMessage: async (messageId, deleteType) => {
+    try {
+      const res = await axiosInstance.delete(`/messages/${messageId}`, {
+        data: { deleteType }, // 'forMe' or 'everyone'
+      });
+
+      const { messages } = get();
+
+      if (deleteType === "forMe") {
+        // Remove locally from UI for current user
+        set({ messages: messages.filter((msg) => msg._id !== messageId) });
+      } else if (deleteType === "everyone") {
+        // Soft delete locally (updates text/image to show deleted status)
+        set({
+          messages: messages.map((msg) =>
+            msg._id === messageId ? res.data.updatedMessage : msg
+          ),
+        });
+      }
+      toast.success("Message deleted");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete message");
+    }
+  },
+
   subscribeToMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    // Prevent attaching duplicate event listeners
     socket.off("newMessage");
     socket.off("messagesRead");
+    socket.off("messageDeleted");
 
     // 1. Listen for incoming messages
     socket.on("newMessage", (newMessage) => {
@@ -58,19 +83,16 @@ export const useChatStore = create((set, get) => ({
       const isMessageSentFromSelectedUser = selectedUser && newMessage.senderId === selectedUser._id;
 
       if (isMessageSentFromSelectedUser) {
-        // Appends to chat view and marks read immediately in DB
         set({
           messages: [...get().messages, { ...newMessage, isRead: true }],
         });
 
         axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`).then(() => {
-          // Notify the sender over socket that we read their message
           socket.emit("messagesRead", { senderId: selectedUser._id });
         }).catch((err) => {
           console.error("Failed to mark message as read:", err);
         });
       } else {
-        // Increments unread badge count for non-selected users
         set({
           users: get().users.map((user) => {
             if (user._id === newMessage.senderId) {
@@ -82,11 +104,9 @@ export const useChatStore = create((set, get) => ({
       }
     });
 
-    // 2. Listen for read receipts (when the selected user reads YOUR messages)
+    // 2. Listen for read receipts
     socket.on("messagesRead", ({ readerId }) => {
       const { selectedUser } = get();
-      
-      // If the person who read the message is currently selected, update double checkmarks to blue
       if (selectedUser && selectedUser._id === readerId) {
         set((state) => ({
           messages: state.messages.map((msg) =>
@@ -95,6 +115,15 @@ export const useChatStore = create((set, get) => ({
         }));
       }
     });
+
+    // 3. Listen for message deletion ("Delete for everyone")
+    socket.on("messageDeleted", ({ messageId, updatedMessage }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === messageId ? updatedMessage : msg
+        ),
+      }));
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -102,25 +131,22 @@ export const useChatStore = create((set, get) => ({
     if (socket) {
       socket.off("newMessage");
       socket.off("messagesRead");
+      socket.off("messageDeleted");
     }
   },
 
   setSelectedUser: async (selectedUser) => {
     set({ selectedUser });
-
     if (!selectedUser) return;
 
-    // 1. Immediately reset unread count in state for selected user
     set({
       users: get().users.map((user) =>
         user._id === selectedUser._id ? { ...user, unreadCount: 0 } : user
       ),
     });
 
-    // 2. Sync unread state in backend database and notify socket
     try {
       await axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`);
-      
       const socket = useAuthStore.getState().socket;
       if (socket) {
         socket.emit("messagesRead", { senderId: selectedUser._id });

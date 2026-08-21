@@ -20,9 +20,12 @@ const PersonaPage = () => {
 
   const [deniedFriend, setDeniedFriend] = useState(null);
   const [isPinging, setIsPinging] = useState(false);
+  
+  const [isAiTyping, setIsAiTyping] = useState(false);
 
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messageEndRef = useRef(null);
 
   useEffect(() => {
     getPersonas();
@@ -38,6 +41,12 @@ const PersonaPage = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (messageEndRef.current) {
+      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isAiTyping]);
 
   const filteredUsers = users.filter((user) =>
     user.fullName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -111,7 +120,7 @@ const PersonaPage = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSend = async (e) => {
+const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() && !image) return;
     if (!selectedPersona) return;
@@ -124,15 +133,24 @@ const PersonaPage = () => {
 
     setInput("");
     removeImage();
+    setIsAiTyping(true); // Turn typing on
 
     try {
       const aiResponse = await sendAiMessage(textToSend, selectedPersona._id, imageToSend);
-      setMessages((prev) => [...prev, aiResponse]);
+      
+      // SAFETY CHECK: Only render if we actually got a message back
+      if (aiResponse && aiResponse.text) {
+        setMessages((prev) => [...prev, aiResponse]);
+      } else {
+        toast.error("AI failed to reply, try again!");
+      }
     } catch (error) {
       console.error(error);
+      toast.error("Network error!");
+    } finally {
+      setIsAiTyping(false); // ALWAYS turn typing off, no matter what!
     }
   };
-
   const handleDelete = (e, personaId) => {
     e.stopPropagation();
     deletePersona(personaId);
@@ -304,6 +322,24 @@ const PersonaPage = () => {
                   </div>
                 </div>
               ))}
+
+              {isAiTyping && (
+                <div className="chat chat-start">
+                  <div className="chat-image avatar">
+                    <div className="size-10 rounded-full border">
+                      <img
+                        src={getFriendProfilePic(selectedPersona.friendName)}
+                        alt="AI profile pic"
+                      />
+                    </div>
+                  </div>
+                  <div className="chat-bubble bg-base-200 text-base-content opacity-50 flex items-center gap-2">
+                    Typing <span className="loading loading-dots loading-xs"></span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messageEndRef} />
             </div>
 
             {image && (

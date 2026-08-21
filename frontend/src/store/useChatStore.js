@@ -44,28 +44,20 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  deleteMessage: async (messageId, deleteType) => {
+  deleteMessage: async (messageId, type) => {
     try {
-      const res = await axiosInstance.delete(`/messages/${messageId}`, {
-        data: { deleteType }, // 'forMe' or 'everyone'
-      });
-
-      const { messages } = get();
-
-      if (deleteType === "forMe") {
-        // Remove locally from UI for current user
-        set({ messages: messages.filter((msg) => msg._id !== messageId) });
-      } else if (deleteType === "everyone") {
-        // Soft delete locally (updates text/image to show deleted status)
-        set({
-          messages: messages.map((msg) =>
-            msg._id === messageId ? res.data.updatedMessage : msg
-          ),
-        });
-      }
-      toast.success("Message deleted");
+      await axiosInstance.delete(`/messages/${messageId}?type=${type}`);
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === messageId
+            ? type === "everyone"
+              ? { ...msg, isDeletedForEveryone: true }
+              : null
+            : msg
+        ).filter(Boolean)
+      }));
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to delete message");
+      console.error(error);
     }
   },
 
@@ -106,15 +98,14 @@ export const useChatStore = create((set, get) => ({
 
     // 2. Listen for read receipts
     socket.on("messagesRead", ({ readerId }) => {
-      const { selectedUser } = get();
-      if (selectedUser && selectedUser._id === readerId) {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            !msg.isRead ? { ...msg, isRead: true } : msg
-          ),
-        }));
-      }
-    });
+  set((state) => ({
+    messages: state.messages.map((msg) =>
+      msg.senderId === useAuthStore.getState().authUser._id
+        ? { ...msg, isRead: true }
+        : msg
+    ),
+  }));
+});
 
     // 3. Listen for message deletion ("Delete for everyone")
     socket.on("messageDeleted", ({ messageId, updatedMessage }) => {
@@ -132,6 +123,7 @@ export const useChatStore = create((set, get) => ({
       socket.off("newMessage");
       socket.off("messagesRead");
       socket.off("messageDeleted");
+      socket.off("messagesRead");
     }
   },
 

@@ -7,7 +7,22 @@ export const getUsersForSidebar = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
     const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
-    res.status(200).json(filteredUsers);
+    const usersWithUnreadCount = await Promise.all(
+      filteredUsers.map(async (user) => {
+        const unreadCount = await Message.countDocuments({
+          senderId: user._id,
+          receiverId: loggedInUserId,
+          isRead: false,
+          deletedFor: { $ne: loggedInUserId }, // Exclude locally deleted messages from unread count
+        });
+        return {
+          ...user.toObject(),
+          unreadCount,
+        };
+      })
+    );
+
+    res.status(200).json(usersWithUnreadCount);
   } catch (error) {
     res.status(500).json({ error: "Internal server error" });
   }

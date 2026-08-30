@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import Persona from "../models/persona.model.js";
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export const sendAiMessage = async (req, res) => {
   try {
@@ -18,7 +21,6 @@ Context: ${persona.shortTermContext}`;
 
     const promptArray = [instructions];
 
-    // If there is an image, attach it safely for Gemini Vision
     if (image) {
       const matches = image.match(/^data:(.+?);base64,(.+)$/);
       if (matches) {
@@ -44,5 +46,44 @@ Context: ${persona.shortTermContext}`;
   } catch (error) {
     console.error("AI Error Details:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getSmartReplies = async (req, res) => {
+  try {
+    const { incomingMessage, previousMessages = [] } = req.body;
+
+    const userStyleContext = previousMessages.length > 0 
+      ? `Here are examples of how the user usually replies: "${previousMessages.join('", "')}". Match this exact tone, casing, slang, and brevity.` 
+      : `Keep responses casual, concise, and natural.`;
+
+    const prompt = `
+      You are a smart reply assistant.
+      The other person said: "${incomingMessage}"
+      ${userStyleContext}
+      Generate exactly 3 distinct, short quick-reply options (1-5 words each).
+      Return ONLY a JSON array of 3 strings. Example format: ["yeah sure", "cant rn", "maybe later"]
+    `;
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      model: "openai/gpt-oss-120b"
+    });
+
+    let responseText = chatCompletion.choices[0]?.message?.content || "[]";
+    
+    responseText = responseText.replace(/```json/gi, "").replace(/```/gi, "").trim();
+    
+    const suggestions = JSON.parse(responseText);
+
+    res.status(200).json(suggestions);
+  } catch (error) {
+    console.error("\n❌ Groq Smart Reply Error:", error.message, "\n");
+    res.status(500).json({ error: "Failed to generate suggestions", details: error.message });
   }
 };

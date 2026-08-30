@@ -9,6 +9,30 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  smartReplies: [],
+  isSmartRepliesLoading: false,
+
+  setSmartReplies: (replies) => set({ smartReplies: replies }),
+
+  getSmartReplies: async (incomingText) => {
+    try {
+      set({ isSmartRepliesLoading: true });
+      const { messages } = get();
+      const myMessages = messages
+        .filter((m) => m.senderId === useAuthStore.getState().authUser._id && m.text)
+        .slice(-2)
+        .map((m) => m.text);
+
+      const res = await axiosInstance.post("/messages/smart-replies", {
+        incomingMessage: incomingText,
+        previousMessages: myMessages,
+      });
+
+      set({ smartReplies: res.data, isSmartRepliesLoading: false });
+    } catch (error) {
+      set({ smartReplies: [], isSmartRepliesLoading: false });
+    }
+  },
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -61,6 +85,8 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  isTyping: false,
+
   subscribeToMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
@@ -68,8 +94,9 @@ export const useChatStore = create((set, get) => ({
     socket.off("newMessage");
     socket.off("messagesRead");
     socket.off("messageDeleted");
+    socket.off("typing");
+    socket.off("stopTyping");
 
-    // 1. Listen for incoming messages
     socket.on("newMessage", (newMessage) => {
       const { selectedUser } = get();
       const isMessageSentFromSelectedUser = selectedUser && newMessage.senderId === selectedUser._id;
@@ -79,10 +106,14 @@ export const useChatStore = create((set, get) => ({
           messages: [...get().messages, { ...newMessage, isRead: true }],
         });
 
+        if (newMessage.text) {
+          get().getSmartReplies(newMessage.text);
+        }
+
         axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`).then(() => {
           socket.emit("messagesRead", { senderId: selectedUser._id });
         }).catch((err) => {
-          console.error("Failed to mark message as read:", err);
+          console.error(err);
         });
       } else {
         set({
@@ -96,18 +127,30 @@ export const useChatStore = create((set, get) => ({
       }
     });
 
-    // 2. Listen for read receipts
-    socket.on("messagesRead", ({ readerId }) => {
-  set((state) => ({
-    messages: state.messages.map((msg) =>
-      msg.senderId === useAuthStore.getState().authUser._id
-        ? { ...msg, isRead: true }
-        : msg
-    ),
-  }));
-});
+    socket.on("typing", ({ senderId }) => {
+      const { selectedUser } = get();
+      if (selectedUser && selectedUser._id === senderId) {
+        set({ isTyping: true });
+      }
+    });
 
-    // 3. Listen for message deletion ("Delete for everyone")
+    socket.on("stopTyping", ({ senderId }) => {
+      const { selectedUser } = get();
+      if (selectedUser && selectedUser._id === senderId) {
+        set({ isTyping: false });
+      }
+    });
+
+    socket.on("messagesRead", ({ readerId }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.senderId === useAuthStore.getState().authUser._id
+            ? { ...msg, isRead: true }
+            : msg
+        ),
+      }));
+    });
+
     socket.on("messageDeleted", ({ messageId, updatedMessage }) => {
       set((state) => ({
         messages: state.messages.map((msg) =>
@@ -123,7 +166,74 @@ export const useChatStore = create((set, get) => ({
       socket.off("newMessage");
       socket.off("messagesRead");
       socket.off("messageDeleted");
+      socket.off("typing");
+      socket.off("stopTyping");
+    }
+  },
+
+  subscribeToMessages: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.off("newMessage");
+    socket.off("messagesRead");
+    socket.off("messageDeleted");
+
+    socket.on("newMessage", (newMessage) => {
+      const { selectedUser } = get();
+      const isMessageSentFromSelectedUser = selectedUser && newMessage.senderId === selectedUser._id;
+
+      if (isMessageSentFromSelectedUser) {
+        set({
+          messages: [...get().messages, { ...newMessage, isRead: true }],
+        });
+
+        if (newMessage.text) {
+          get().getSmartReplies(newMessage.text);
+        }
+
+        axiosInstance.put(`/messages/mark-as-read/${selectedUser._id}`).then(() => {
+          socket.emit("messagesRead", { senderId: selectedUser._id });
+        }).catch((err) => {
+          console.error(err);
+        });
+      } else {
+        set({
+          users: get().users.map((user) => {
+            if (user._id === newMessage.senderId) {
+              return { ...user, unreadCount: (user.unreadCount || 0) + 1 };
+            }
+            return user;
+          }),
+        });
+      }
+    });
+
+    socket.on("messagesRead", ({ readerId }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.senderId === useAuthStore.getState().authUser._id
+            ? { ...msg, isRead: true }
+            : msg
+        ),
+      }));
+    });
+
+    socket.on("messageDeleted", ({ messageId, updatedMessage }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === messageId ? updatedMessage : msg
+        ),
+      }));
+    });
+  },
+
+  unsubscribeFromMessages: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+      socket.off("newMessage");
       socket.off("messagesRead");
+      socket.off("messageDeleted");
     }
   },
 
@@ -144,7 +254,7 @@ export const useChatStore = create((set, get) => ({
         socket.emit("messagesRead", { senderId: selectedUser._id });
       }
     } catch (error) {
-      console.error("Failed to mark messages as read:", error);
+      console.error(error);
     }
   },
 }));

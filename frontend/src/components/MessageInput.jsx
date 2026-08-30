@@ -1,14 +1,31 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Paperclip, Send, X, FileText, Music, Video } from "lucide-react";
+import { useAuthStore } from "../store/useAuthStore";
+import { Paperclip, Send, X, FileText, Music, Video, Smile } from "lucide-react";
+import EmojiPicker from "emoji-picker-react";
 import toast from "react-hot-toast";
 
 const MessageInput = ({ replyingTo, setReplyingTo }) => {
   const [text, setText] = useState("");
   const [filePreview, setFilePreview] = useState(null);
   const [fileType, setFileType] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const emojiPickerRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  
+  const { sendMessage, smartReplies, setSmartReplies, isSmartRepliesLoading, selectedUser } = useChatStore();
+  const { socket } = useAuthStore();
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -31,9 +48,39 @@ const MessageInput = ({ replyingTo, setReplyingTo }) => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleSelectReply = (replyText) => {
+    setText(replyText);
+    setSmartReplies([]);
+  };
+
+  const handleEmojiClick = (emojiObject) => {
+    setText((prev) => prev + emojiObject.emoji);
+  };
+
+  const handleTextChange = (e) => {
+    setText(e.target.value);
+
+    if (socket && selectedUser) {
+      socket.emit("typing", { receiverId: selectedUser._id });
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit("stopTyping", { receiverId: selectedUser._id });
+      }, 2000);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim() && !filePreview) return;
+
+    if (socket && selectedUser) {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      socket.emit("stopTyping", { receiverId: selectedUser._id });
+    }
+
+    setShowEmojiPicker(false);
 
     const loadingToastId = filePreview?.length > 5000000 ? toast.loading("Uploading massive file (this might take a bit)...") : null;
 
@@ -64,7 +111,7 @@ const MessageInput = ({ replyingTo, setReplyingTo }) => {
   };
 
   return (
-    <div className="p-4 w-full border-t border-base-300 bg-base-100">
+    <div className="p-4 w-full border-t border-base-300 bg-base-100 relative">
       {filePreview && (
         <div className="mb-3 flex items-center gap-2">
           <div className="relative p-2 bg-base-200 rounded-lg border border-zinc-700 flex items-center gap-2">
@@ -106,14 +153,48 @@ const MessageInput = ({ replyingTo, setReplyingTo }) => {
         </div>
       )}
 
+      {isSmartRepliesLoading && (
+        <div className="flex gap-2 mb-2 px-2">
+          <span className="loading loading-dots loading-xs text-primary"></span>
+        </div>
+      )}
+
+      {!isSmartRepliesLoading && smartReplies.length > 0 && (
+        <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
+          {smartReplies.map((reply, index) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => handleSelectReply(reply)}
+              className="btn btn-xs btn-outline btn-primary rounded-full normal-case text-xs px-3 whitespace-nowrap"
+            >
+              {reply}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showEmojiPicker && (
+        <div ref={emojiPickerRef} className="absolute bottom-24 left-4 z-50">
+          <EmojiPicker onEmojiClick={handleEmojiClick} theme="dark" />
+        </div>
+      )}
+
       <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-        <div className="flex-1 flex gap-2">
+        <div className="flex-1 flex gap-2 items-center">
+          <button
+            type="button"
+            className="btn btn-circle btn-ghost text-zinc-400 hover:text-primary"
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
+          >
+            <Smile size={20} />
+          </button>
           <input
             type="text"
             className="w-full input input-bordered rounded-lg input-sm sm:input-md bg-base-200"
             placeholder="Type a message..."
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={handleTextChange}
           />
           <input
             type="file"

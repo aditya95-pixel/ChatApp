@@ -1,3 +1,4 @@
+import { getSmartReplies } from "../controllers/aiMessage.controller.js";
 import express from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import {
@@ -16,5 +17,5 @@ router.get("/:id", protectRoute, getMessages);
 router.post("/send/:id", protectRoute, sendMessage);
 router.put("/mark-as-read/:id", protectRoute, markMessagesAsRead);
 router.delete("/:id", protectRoute, deleteMessage);
-
+router.post("/smart-replies", protectRoute, getSmartReplies);
 export default router;

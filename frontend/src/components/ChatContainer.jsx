@@ -167,7 +167,7 @@ const ChatContainer = () => {
     return 'image';
   };
 
-const handleDirectDownload = (fileData) => {
+  const handleDirectDownload = (fileData) => {
     if (!fileData) return;
     
     if (fileData.startsWith("data:")) {

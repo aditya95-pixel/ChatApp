@@ -19,15 +19,12 @@ export function getReceiverSocketId(userId) {
 const userSocketMap = {}; 
 
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
-
   const userId = socket.handshake.query.userId;
   if (userId) userSocketMap[userId] = socket.id;
 
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   socket.on("typing", ({ receiverId }) => {
-    console.log("2. Backend received typing signal! Forwarding to:", receiverId);
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("typing", { senderId: userId });
@@ -42,7 +39,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
     delete userSocketMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });

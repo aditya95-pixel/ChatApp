@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Camera, Mail, User, Phone } from "lucide-react";
+import { Camera, Mail, User, Phone, Info } from "lucide-react";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
-  
-  // Local state for editable phone number
+
+  // Local state fields
   const [phoneNumber, setPhoneNumber] = useState(authUser?.phoneNumber || "");
-  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [about, setAbout] = useState(authUser?.about || "Hey there! I am using this app.");
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -26,7 +26,10 @@ const ProfilePage = () => {
 
   const handlePhoneUpdate = async () => {
     await updateProfile({ phoneNumber });
-    setIsEditingPhone(false);
+  };
+
+  const handleAboutUpdate = async () => {
+    await updateProfile({ about });
   };
 
   return (
@@ -34,17 +37,17 @@ const ProfilePage = () => {
       <div className="max-w-2xl mx-auto p-4 py-8">
         <div className="bg-base-300 rounded-xl p-6 space-y-8">
           <div className="text-center">
-            <h1 className="text-2xl font-semibold ">Profile</h1>
+            <h1 className="text-2xl font-semibold">Profile</h1>
             <p className="mt-2">Your profile information</p>
           </div>
 
-          {/* avatar upload section */}
+          {/* Avatar Upload */}
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <img
                 src={selectedImg || authUser?.profilePic || "/avatar.png"}
                 alt="Profile"
-                className="size-32 rounded-full object-cover border-4 "
+                className="size-32 rounded-full object-cover border-4"
               />
               <label
                 htmlFor="avatar-upload"
@@ -72,7 +75,7 @@ const ProfilePage = () => {
             </p>
           </div>
 
-          {/* Details Section */}
+          {/* User Information */}
           <div className="space-y-6">
             <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
@@ -90,7 +93,33 @@ const ProfilePage = () => {
               <p className="px-4 py-2.5 bg-base-200 rounded-lg border">{authUser?.email}</p>
             </div>
 
-            {/* Phone Number Field */}
+            {/* About Field */}
+            <div className="space-y-1.5">
+              <div className="text-sm text-zinc-400 flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                About
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={139}
+                  className="flex-1 px-4 py-2.5 bg-base-200 rounded-lg border focus:outline-none"
+                  value={about}
+                  onChange={(e) => setAbout(e.target.value)}
+                  disabled={isUpdatingProfile}
+                />
+                <button
+                  type="button"
+                  onClick={handleAboutUpdate}
+                  disabled={isUpdatingProfile || about === authUser?.about}
+                  className="btn btn-primary px-4 py-2.5 rounded-lg text-sm font-medium"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            {/* Phone Field */}
             <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
                 <Phone className="w-4 h-4" />
@@ -135,4 +164,5 @@ const ProfilePage = () => {
     </div>
   );
 };
+
 export default ProfilePage;

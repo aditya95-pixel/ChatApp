@@ -87,25 +87,22 @@ export const logout = (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { profilePic, phoneNumber } = req.body;
+    const { profilePic, phoneNumber, about } = req.body;
     const userId = req.user._id;
 
-    if (!profilePic && phoneNumber === undefined) {
-      return res.status(400).json({ message: "At least one field (profilePic or phoneNumber) is required" });
+    if (!profilePic && phoneNumber === undefined && about === undefined) {
+      return res.status(400).json({ message: "At least one field is required to update" });
     }
 
     const updatedFields = {};
 
-    // Upload image to Cloudinary if provided
     if (profilePic) {
       const uploadResponse = await cloudinary.uploader.upload(profilePic);
       updatedFields.profilePic = uploadResponse.secure_url;
     }
 
-    // Update phone number if provided
-    if (phoneNumber !== undefined) {
-      updatedFields.phoneNumber = phoneNumber;
-    }
+    if (phoneNumber !== undefined) updatedFields.phoneNumber = phoneNumber;
+    if (about !== undefined) updatedFields.about = about;
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,

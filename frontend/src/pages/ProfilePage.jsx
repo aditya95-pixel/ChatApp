@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Camera, Mail, User } from "lucide-react";
+import { Camera, Mail, User, Phone } from "lucide-react";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
+  
+  // Local state for editable phone number
+  const [phoneNumber, setPhoneNumber] = useState(authUser?.phoneNumber || "");
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-
     reader.readAsDataURL(file);
 
     reader.onload = async () => {
@@ -19,6 +22,11 @@ const ProfilePage = () => {
       setSelectedImg(base64Image);
       await updateProfile({ profilePic: base64Image });
     };
+  };
+
+  const handlePhoneUpdate = async () => {
+    await updateProfile({ phoneNumber });
+    setIsEditingPhone(false);
   };
 
   return (
@@ -31,11 +39,10 @@ const ProfilePage = () => {
           </div>
 
           {/* avatar upload section */}
-
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <img
-                src={selectedImg || authUser.profilePic || "/avatar.png"}
+                src={selectedImg || authUser?.profilePic || "/avatar.png"}
                 alt="Profile"
                 className="size-32 rounded-full object-cover border-4 "
               />
@@ -65,6 +72,7 @@ const ProfilePage = () => {
             </p>
           </div>
 
+          {/* Details Section */}
           <div className="space-y-6">
             <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
@@ -81,14 +89,40 @@ const ProfilePage = () => {
               </div>
               <p className="px-4 py-2.5 bg-base-200 rounded-lg border">{authUser?.email}</p>
             </div>
+
+            {/* Phone Number Field */}
+            <div className="space-y-1.5">
+              <div className="text-sm text-zinc-400 flex items-center gap-2">
+                <Phone className="w-4 h-4" />
+                Phone Number
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  className="flex-1 px-4 py-2.5 bg-base-200 rounded-lg border focus:outline-none"
+                  value={phoneNumber}
+                  placeholder="Enter your phone number"
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  disabled={isUpdatingProfile}
+                />
+                <button
+                  type="button"
+                  onClick={handlePhoneUpdate}
+                  disabled={isUpdatingProfile || phoneNumber === (authUser?.phoneNumber || "")}
+                  className="btn btn-primary px-4 py-2.5 rounded-lg text-sm font-medium"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mt-6 bg-base-300 rounded-xl p-6">
-            <h2 className="text-lg font-medium  mb-4">Account Information</h2>
+            <h2 className="text-lg font-medium mb-4">Account Information</h2>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between py-2 border-b border-zinc-700">
                 <span>Member Since</span>
-                <span>{authUser.createdAt?.split("T")[0]}</span>
+                <span>{authUser?.createdAt?.split("T")[0]}</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span>Account Status</span>
